@@ -1,0 +1,39 @@
+{
+  "name": "email-mcp",
+  "version": "0.1.0",
+  "description": "Email Model Context Protocol server",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "email-mcp": "./build/index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').chmodSync('build/index.js', '755')\"",
+    "prepare": "npm run build",
+    "watch": "tsc --watch",
+    "inspector": "npx @modelcontextprotocol/inspector build/index.js",
+    "dev": "node build/index.js",
+    "setup": "node build-setup.js",
+    "start": "node build/index.js",
+    "start-gateway": "npx supergateway serve --stdio \"node build/index.js\" --port 3100"
+  },
+  "keywords": ["mcp", "email", "nodemailer"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "0.6.0",
+    "dotenv": "^16.3.1",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.13"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.11.24",
+    "@types/nodemailer": "^6.4.14",
+    "supergateway": "^2.8.3",
+    "typescript": "^5.3.3"
+  }
+} 
