@@ -1,189 +1,182 @@
-# Email MCP (Model Context Protocol)
+# Email MCP Server
 
-基于MCP协议的电子邮件服务，允许AI模型通过简单工具调用发送邮件。
+一个基于Model Context Protocol (MCP) 的邮件服务器，让AI可以发送、读取、搜索、删除和回复邮件。支持SMTP和Gmail API两种方式。
 
-## 功能特点
+## 🚀 功能特性
 
-- 基于标准Model Context Protocol (MCP)协议实现
-- 支持VS Code MCP集成，可在VS Code中直接使用
-- 提供邮件发送、模板生成等工具
-- 支持JWT认证机制
-- 支持纯文本和HTML格式的邮件内容
-- 支持SuperGateway集成，方便调试
+- ✉️ **发送邮件** - 支持HTML/纯文本格式，附件功能
+- 📥 **读取邮件** - 从收件箱或指定文件夹读取邮件
+- 🔍 **搜索邮件** - 按关键词搜索邮件
+- 🗑️ **删除邮件** - 删除指定邮件
+- ↩️ **回复邮件** - 支持回复和全部回复
 
-## 快速开始
-
-### 安装与设置
+## 📦 安装
 
 ```bash
-# 克隆仓库
-git clone https://github.com/yourusername/email-mcp.git
-cd email-mcp
-
-# 快速设置（包括依赖安装、配置生成和构建）
-npm run setup
+npm install
+npm run build
 ```
 
-设置过程将引导你创建所需的`.env`配置文件和VS Code MCP配置。
-
-### 运行服务
-
+或者快速安装：
 ```bash
-# 标准模式
+npm run quick-setup
+```
+
+## ⚙️ 配置
+
+1. 复制环境变量模板：
+```bash
+cp env.example .env
+```
+
+2. 编辑 `.env` 文件，选择邮件提供商：
+
+### 选项一：使用SMTP (推荐)
+```env
+EMAIL_PROVIDER=smtp
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+DEFAULT_FROM_EMAIL=your-email@gmail.com
+```
+
+### 选项二：使用Gmail API
+```env
+EMAIL_PROVIDER=gmail
+GMAIL_CLIENT_ID=your-gmail-client-id
+GMAIL_CLIENT_SECRET=your-gmail-client-secret
+GMAIL_REFRESH_TOKEN=your-gmail-refresh-token
+DEFAULT_FROM_EMAIL=your-email@gmail.com
+```
+
+## 🔧 使用方法
+
+### 直接启动
+```bash
 npm run start
+```
 
-# 开发模式
-npm run dev
-
-# 通过SuperGateway运行（用于AI模型集成）
+### 使用SuperGateway调试 (推荐)
+```bash
 npm run start-gateway
 ```
+服务将在 http://localhost:3200 启动
 
-## MCP工具
+### 开发模式
+```bash
+npm run dev
+```
 
-Email MCP提供以下工具：
+## 🛠️ 可用工具
 
-### 1. get_token
+### 1. send_email
+发送邮件给指定收件人
 
-获取邮件操作所需的认证令牌。
+**参数：**
+- `to` (必需): 收件人邮箱地址
+- `subject` (必需): 邮件主题
+- `body` (必需): 邮件内容
+- `from` (可选): 发件人邮箱地址
+- `html` (可选): 是否为HTML格式
+- `attachments` (可选): 附件数组
 
-**参数**:
-- `api_key`: API密钥
-
-**返回**:
+**示例：**
 ```json
 {
-  "success": true,
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "expiresIn": "24 hours"
-  }
+  "to": "recipient@example.com",
+  "subject": "Hello from AI",
+  "body": "This is a test email sent by AI assistant.",
+  "html": false
 }
 ```
 
-### 2. verify_token
+### 2. read_emails
+从收件箱或指定文件夹读取邮件
 
-验证令牌是否有效。
+**参数：**
+- `limit` (可选): 邮件数量限制 (默认: 10)
+- `folder` (可选): 邮件文件夹 (默认: "INBOX")
+- `unreadOnly` (可选): 只读取未读邮件 (默认: false)
 
-**参数**:
-- `token`: JWT令牌
+### 3. search_emails
+搜索邮件
 
-**返回**:
+**参数：**
+- `query` (必需): 搜索关键词
+- `limit` (可选): 结果数量限制 (默认: 10)
+- `folder` (可选): 搜索文件夹 (默认: "INBOX")
+
+### 4. delete_email
+删除邮件
+
+**参数：**
+- `messageId` (必需): 要删除的邮件ID
+
+### 5. reply_email
+回复邮件
+
+**参数：**
+- `messageId` (必需): 原邮件ID
+- `body` (必需): 回复内容
+- `replyAll` (可选): 是否回复全部 (默认: false)
+- `html` (可选): 是否为HTML格式 (默认: false)
+
+## 🔐 Gmail API设置 (如果使用Gmail提供商)
+
+1. 创建Google Cloud项目
+2. 启用Gmail API
+3. 配置OAuth同意屏幕
+4. 创建OAuth客户端ID (桌面应用)
+5. 下载客户端密钥JSON文件
+6. 获取刷新令牌
+
+详细步骤参考：[Gmail API快速入门](https://developers.google.com/gmail/api/quickstart)
+
+## 📝 使用示例
+
+### 在Claude Desktop中使用
+
+在 `claude_desktop_config.json` 中添加：
+
 ```json
 {
-  "success": true,
-  "data": {
-    "valid": true,
-    "details": {
-      "authorized": true,
-      "iat": 1616812345,
-      "exp": 1616898745
+  "mcpServers": {
+    "email": {
+      "command": "node",
+      "args": ["path/to/email-mcp/dist/index.js"]
     }
   }
 }
 ```
 
-### 3. send_email
+### 在其他MCP客户端中使用
 
-发送电子邮件。
+服务器通过stdio协议运行，兼容所有支持MCP的客户端。
 
-**参数**:
-- `to`: 收件人邮箱
-- `subject`: 邮件主题
-- `text`: 纯文本内容 (可选，如果提供html则可不提供)
-- `html`: HTML内容 (可选，如果提供text则可不提供)
-- `cc`: 抄送 (可选)
-- `bcc`: 密送 (可选)
+## 🐛 故障排除
 
-**返回**:
-```json
-{
-  "success": true,
-  "data": {
-    "messageId": "<message_id>",
-    "timestamp": "2023-05-26T12:34:56.789Z"
-  }
-}
-```
+### 常见问题
 
-### 4. email_template
+1. **SMTP认证失败**
+   - 确保启用了"应用密码"而不是常规密码
+   - 检查SMTP设置是否正确
 
-生成各种类型的邮件模板。
+2. **Gmail API错误**
+   - 确保OAuth令牌有效
+   - 检查API配额和权限
 
-**参数**:
-- `template_type`: 模板类型，可选 "greeting", "notification", "reminder", "newsletter", "custom"
-- `title`: 邮件标题
-- `content`: 邮件内容
-- `recipient_name`: 收件人姓名 (可选)
-- `sender_name`: 发件人姓名 (可选)
-- `custom_fields`: 自定义字段，用于自定义模板 (可选)
+3. **TypeScript编译错误**
+   - 运行 `npm install` 确保依赖安装完整
+   - 检查Node.js版本 (推荐 v18+)
 
-**返回**:
-```json
-{
-  "success": true,
-  "data": {
-    "html": "<!DOCTYPE html>...",
-    "text": "标题\n=====\nDear 收件人,\n...",
-    "subject": "邮件标题"
-  }
-}
-```
+## 🔗 相关链接
 
-## VS Code集成
+- [Model Context Protocol](https://github.com/anthropics/mcp)
+- [SuperGateway](https://supergateway.ai)
+- [Gmail API文档](https://developers.google.com/gmail/api)
 
-Email MCP可以在VS Code中作为MCP服务器使用，让你的大语言模型可以直接发送邮件。
+## �� 许可证
 
-### 配置方式
-
-1. 打开VS Code
-2. 按下`Ctrl+Shift+P`打开命令面板
-3. 输入并选择`MCP: List Servers`
-4. 选择`EmailMCP`并点击`Start`
-5. 在聊天视图中选择`Agent`模式，然后使用`Tools`按钮选择Email MCP提供的工具
-
-### 聊天示例
-
-```
-发送一封邮件给recipient@example.com，主题是"会议通知"，内容是"明天下午2点开会，请准时参加"
-```
-
-## 在自己的项目中集成
-
-### 通过SuperGateway调用
-
-```javascript
-async function sendEmailWithMCP() {
-  const response = await fetch('http://localhost:3100/mcp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'send_email',
-      parameters: {
-        to: 'recipient@example.com',
-        subject: 'Hello from MCP',
-        text: 'This is a test email sent via MCP.'
-      }
-    })
-  });
-  
-  return await response.json();
-}
-```
-
-### 通过CLI命令配置VS Code
-
-```bash
-code --add-mcp "{\"name\":\"EmailMCP\",\"type\":\"stdio\",\"command\":\"node\",\"args\":[\"path/to/email-mcp/build/index.js\"]}"
-```
-
-## 安全注意事项
-
-- 请勿在公共仓库中提交包含敏感信息的.env文件
-- 定期轮换API密钥和JWT密钥
-- 考虑添加速率限制以防止API滥用
-- 监控邮件发送日志以检测异常活动
-
-## 许可证
-
-ISC 
+ISC License 
