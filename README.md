@@ -1,6 +1,6 @@
 # Email MCP Server
 
-一个基于Model Context Protocol (MCP) 的邮件服务器，让AI可以发送、读取、搜索、删除和回复邮件。支持SMTP和Gmail API两种方式。
+一个基于Model Context Protocol (MCP) 的邮件服务器，让AI可以发送、读取、搜索、删除和回复邮件。支持SMTP和Gmail API两种方式，兼容QQ邮箱、163邮箱、Gmail等常见邮箱服务。
 
 ## 🚀 功能特性
 
@@ -31,7 +31,35 @@ cp env.example .env
 
 2. 编辑 `.env` 文件，选择邮件提供商：
 
-### 选项一：使用SMTP (推荐)
+### 选项一：使用QQ邮箱 (推荐)
+```env
+EMAIL_PROVIDER=smtp
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@qq.com
+SMTP_PASS=your-authorization-code
+DEFAULT_FROM_EMAIL=your-email@qq.com
+```
+
+**QQ邮箱设置步骤：**
+1. 登录QQ邮箱 → 设置 → 账户
+2. 开启SMTP服务
+3. 生成授权码（不是QQ密码）
+4. 将授权码填入`SMTP_PASS`
+
+### 选项二：使用163邮箱
+```env
+EMAIL_PROVIDER=smtp
+SMTP_HOST=smtp.163.com
+SMTP_PORT=994
+SMTP_SECURE=true
+SMTP_USER=your-email@163.com
+SMTP_PASS=your-authorization-code
+DEFAULT_FROM_EMAIL=your-email@163.com
+```
+
+### 选项三：使用Gmail
 ```env
 EMAIL_PROVIDER=smtp
 SMTP_HOST=smtp.gmail.com
@@ -42,7 +70,7 @@ SMTP_PASS=your-app-password
 DEFAULT_FROM_EMAIL=your-email@gmail.com
 ```
 
-### 选项二：使用Gmail API
+### 选项四：使用Gmail API
 ```env
 EMAIL_PROVIDER=gmail
 GMAIL_CLIENT_ID=your-gmail-client-id
@@ -63,6 +91,26 @@ npm run start
 npm run start-gateway
 ```
 服务将在 http://localhost:3200 启动
+
+### 在Cline中配置
+```json
+{
+  "mcpServers": {
+    "email-mcp": {
+      "url": "http://localhost:3200/sse",
+      "type": "sse",
+      "disabled": false,
+      "autoApprove": [
+        "send_email",
+        "read_emails", 
+        "search_emails",
+        "delete_email",
+        "reply_email"
+      ]
+    }
+  }
+}
+```
 
 ### 开发模式
 ```bash
@@ -85,9 +133,9 @@ npm run dev
 **示例：**
 ```json
 {
-  "to": "recipient@example.com",
-  "subject": "Hello from AI",
-  "body": "This is a test email sent by AI assistant.",
+  "to": "recipient@qq.com",
+  "subject": "来自AI的问候",
+  "body": "这是一封由AI助手发送的测试邮件。",
   "html": false
 }
 ```
@@ -123,51 +171,39 @@ npm run dev
 - `replyAll` (可选): 是否回复全部 (默认: false)
 - `html` (可选): 是否为HTML格式 (默认: false)
 
-## 🔐 Gmail API设置 (如果使用Gmail提供商)
+## 🔐 支持的邮箱服务
 
-1. 创建Google Cloud项目
-2. 启用Gmail API
-3. 配置OAuth同意屏幕
-4. 创建OAuth客户端ID (桌面应用)
-5. 下载客户端密钥JSON文件
-6. 获取刷新令牌
-
-详细步骤参考：[Gmail API快速入门](https://developers.google.com/gmail/api/quickstart)
-
-## 📝 使用示例
-
-### 在Claude Desktop中使用
-
-在 `claude_desktop_config.json` 中添加：
-
-```json
-{
-  "mcpServers": {
-    "email": {
-      "command": "node",
-      "args": ["path/to/email-mcp/dist/index.js"]
-    }
-  }
-}
-```
-
-### 在其他MCP客户端中使用
-
-服务器通过stdio协议运行，兼容所有支持MCP的客户端。
+| 邮箱服务 | SMTP服务器 | 端口 | 安全连接 | 说明 |
+|---------|------------|------|----------|------|
+| QQ邮箱 | smtp.qq.com | 587 | false | 需要开启SMTP服务并获取授权码 |
+| 163邮箱 | smtp.163.com | 994 | true | 需要开启SMTP服务并获取授权码 |
+| Gmail | smtp.gmail.com | 587 | false | 需要开启两步验证并生成应用密码 |
+| Outlook | smtp-mail.outlook.com | 587 | false | 需要开启SMTP认证 |
 
 ## 🐛 故障排除
 
 ### 常见问题
 
-1. **SMTP认证失败**
-   - 确保启用了"应用密码"而不是常规密码
+1. **QQ邮箱认证失败**
+   - 确保已开启SMTP服务
+   - 使用授权码而不是QQ密码
    - 检查SMTP设置是否正确
 
-2. **Gmail API错误**
+2. **163邮箱认证失败**
+   - 确保已开启SMTP服务
+   - 使用客户端授权密码
+   - 注意端口使用994并开启SSL
+
+3. **Gmail认证失败**
+   - 确保启用了"应用密码"
+   - 开启两步验证
+   - 检查SMTP设置是否正确
+
+4. **Gmail API错误**
    - 确保OAuth令牌有效
    - 检查API配额和权限
 
-3. **TypeScript编译错误**
+5. **TypeScript编译错误**
    - 运行 `npm install` 确保依赖安装完整
    - 检查Node.js版本 (推荐 v18+)
 
@@ -176,6 +212,7 @@ npm run dev
 - [Model Context Protocol](https://github.com/anthropics/mcp)
 - [SuperGateway](https://supergateway.ai)
 - [Gmail API文档](https://developers.google.com/gmail/api)
+- [QQ邮箱SMTP设置](https://service.mail.qq.com/cgi-bin/help?subtype=1&&id=28&&no=1001256)
 
 ## �� 许可证
 

@@ -2,39 +2,42 @@ import nodemailer from "nodemailer";
 import { gmail_v1, google } from "googleapis";
 import fs from "fs/promises";
 
+// 发送邮件参数接口
 interface SendEmailArgs {
-  to: string;
-  subject: string;
-  body: string;
-  from?: string;
-  html?: boolean;
+  to: string;          // 收件人
+  subject: string;     // 邮件主题
+  body: string;        // 邮件内容
+  from?: string;       // 发件人（可选）
+  html?: boolean;      // 是否为HTML格式
   attachments?: Array<{
-    filename: string;
-    path?: string;
-    content?: string;
+    filename: string;  // 附件文件名
+    path?: string;     // 文件路径
+    content?: string;  // 文件内容
   }>;
 }
 
+// 邮件配置接口
 interface EmailConfig {
-  provider: "smtp" | "gmail";
+  provider: "smtp" | "gmail";  // 邮件提供商
   smtp?: {
-    host: string;
-    port: number;
-    secure: boolean;
+    host: string;              // SMTP服务器地址
+    port: number;              // 端口号
+    secure: boolean;           // 是否使用SSL
     auth: {
-      user: string;
-      pass: string;
+      user: string;            // 用户名
+      pass: string;            // 密码或授权码
     };
   };
   gmail?: {
-    clientId: string;
-    clientSecret: string;
-    refreshToken: string;
-    accessToken?: string;
+    clientId: string;          // Gmail客户端ID
+    clientSecret: string;      // Gmail客户端密钥
+    refreshToken: string;      // 刷新令牌
+    accessToken?: string;      // 访问令牌
   };
-  defaultFrom: string;
+  defaultFrom: string;         // 默认发件人
 }
 
+// 获取邮件配置
 function getEmailConfig(): EmailConfig {
   const provider = (process.env.EMAIL_PROVIDER || "smtp") as "smtp" | "gmail";
   
@@ -66,6 +69,7 @@ function getEmailConfig(): EmailConfig {
   };
 }
 
+// 通过Gmail API发送邮件
 async function sendViaGmail(args: SendEmailArgs, config: EmailConfig) {
   const oauth2Client = new google.auth.OAuth2(
     config.gmail!.clientId,
@@ -79,7 +83,7 @@ async function sendViaGmail(args: SendEmailArgs, config: EmailConfig) {
 
   const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
-  // Create email content
+  // 创建邮件内容
   const emailLines = [
     `To: ${args.to}`,
     `From: ${args.from || config.defaultFrom}`,
@@ -106,6 +110,7 @@ async function sendViaGmail(args: SendEmailArgs, config: EmailConfig) {
   };
 }
 
+// 通过SMTP发送邮件
 async function sendViaSMTP(args: SendEmailArgs, config: EmailConfig) {
   const transporter = nodemailer.createTransport({
     host: config.smtp!.host,
@@ -114,18 +119,18 @@ async function sendViaSMTP(args: SendEmailArgs, config: EmailConfig) {
     auth: config.smtp!.auth,
   });
 
-  // Process attachments
+  // 处理附件
   const attachments = [];
   if (args.attachments) {
     for (const attachment of args.attachments) {
       if (attachment.path) {
-        // File attachment
+        // 文件附件
         attachments.push({
           filename: attachment.filename,
           path: attachment.path,
         });
       } else if (attachment.content) {
-        // Content attachment
+        // 内容附件
         attachments.push({
           filename: attachment.filename,
           content: attachment.content,
@@ -150,24 +155,25 @@ async function sendViaSMTP(args: SendEmailArgs, config: EmailConfig) {
   };
 }
 
+// 创建发送邮件工具
 export function createSendEmailTool() {
   return async (args: SendEmailArgs) => {
     try {
       const config = getEmailConfig();
       
-      // Validate required environment variables
+      // 验证必需的环境变量
       if (config.provider === "gmail") {
         if (!config.gmail?.clientId || !config.gmail?.clientSecret || !config.gmail?.refreshToken) {
-          throw new Error("Gmail configuration missing. Please set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REFRESH_TOKEN");
+          throw new Error("Gmail配置缺失。请设置 GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, 和 GMAIL_REFRESH_TOKEN");
         }
       } else {
         if (!config.smtp?.auth.user || !config.smtp?.auth.pass) {
-          throw new Error("SMTP configuration missing. Please set SMTP_USER and SMTP_PASS");
+          throw new Error("SMTP配置缺失。请设置 SMTP_USER 和 SMTP_PASS");
         }
       }
 
       if (!config.defaultFrom) {
-        throw new Error("DEFAULT_FROM_EMAIL environment variable is required");
+        throw new Error("DEFAULT_FROM_EMAIL 环境变量是必需的");
       }
 
       let result;
@@ -181,17 +187,17 @@ export function createSendEmailTool() {
         content: [
           {
             type: "text",
-            text: `✅ Email sent successfully!\n\nDetails:\n- To: ${args.to}\n- Subject: ${args.subject}\n- Provider: ${result.provider}\n- Message ID: ${result.messageId}\n- Format: ${args.html ? "HTML" : "Plain Text"}${args.attachments ? `\n- Attachments: ${args.attachments.length}` : ""}`,
+            text: `✅ 邮件发送成功！\n\n详情:\n- 收件人: ${args.to}\n- 主题: ${args.subject}\n- 提供商: ${result.provider}\n- 消息ID: ${result.messageId}\n- 格式: ${args.html ? "HTML" : "纯文本"}${args.attachments ? `\n- 附件数量: ${args.attachments.length}` : ""}`,
           },
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      const errorMessage = error instanceof Error ? error.message : "发生未知错误";
       return {
         content: [
           {
             type: "text",
-            text: `❌ Failed to send email: ${errorMessage}`,
+            text: `❌ 邮件发送失败: ${errorMessage}`,
           },
         ],
       };
