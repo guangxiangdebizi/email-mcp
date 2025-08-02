@@ -2,6 +2,10 @@
 
 一个基于Model Context Protocol (MCP) 的邮件服务器，让AI可以发送、读取、搜索、删除和回复邮件。支持SMTP和Gmail API两种方式，兼容QQ邮箱、163邮箱、Gmail等常见邮箱服务。
 
+<a href="https://glama.ai/mcp/servers/@guangxiangdebizi/email-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@guangxiangdebizi/email-mcp/badge" alt="Email MCP server" />
+</a>
+
 ## 🚀 功能特性
 
 - ✉️ **发送邮件** - 支持HTML/纯文本格式，附件功能
@@ -216,4 +220,4 @@ npm run dev
 
 ## �� 许可证
 
-ISC License 
+ISC License
