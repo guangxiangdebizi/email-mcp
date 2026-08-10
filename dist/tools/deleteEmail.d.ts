@@ -1,10 +1,11 @@
-interface DeleteEmailArgs {
+import { type EmailConfigResolver } from "./toolResult.js";
+export interface DeleteEmailArgs {
     messageId: string;
+    account?: string;
 }
-export declare function createDeleteEmailTool(): (args: DeleteEmailArgs) => Promise<{
+export declare function createDeleteEmailTool(resolveConfig: EmailConfigResolver): ({ messageId, account }: DeleteEmailArgs) => Promise<{
     content: {
-        type: string;
+        type: "text";
         text: string;
     }[];
 }>;
-export {};

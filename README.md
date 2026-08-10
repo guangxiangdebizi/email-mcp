@@ -1,219 +1,211 @@
 # Email MCP Server
 
-一个基于Model Context Protocol (MCP) 的邮件服务器，让AI可以发送、读取、搜索、删除和回复邮件。支持SMTP和Gmail API两种方式，兼容QQ邮箱、163邮箱、Gmail等常见邮箱服务。
+一个基于 MCP **Streamable HTTP** 的通用邮箱服务。固定提供 5 个工具，支持通过标准
+IMAP/SMTP 使用 QQ、163、126、Gmail、Outlook、Yahoo、iCloud、企业邮箱和自建邮箱，
+同时保留 Gmail API 模式。
 
-## 🚀 功能特性
+## 解决的问题
 
-- ✉️ **发送邮件** - 支持HTML/纯文本格式，附件功能
-- 📥 **读取邮件** - 从收件箱或指定文件夹读取邮件
-- 🔍 **搜索邮件** - 按关键词搜索邮件
-- 🗑️ **删除邮件** - 删除指定邮件
-- ↩️ **回复邮件** - 支持回复和全部回复
+Issue #1 的根因是旧版本只有 `send_email` 使用 SMTP；读取、搜索、删除和回复全部写死为
+Gmail API，因此 163 等邮箱只能发信。当前实现改为：
 
-## 📦 安装
+- `send_email`、`reply_email`：标准 SMTP（或 Gmail API）。
+- `read_emails`、`search_emails`、`delete_email`：标准 IMAP（或 Gmail API）。
+- 工具总数仍为 **5**，名称保持不变。
+- 每个工具都有可选 `account` 参数，可在命名账号之间逐次调用切换。
+- 每个 HTTP 请求也可使用 `X-Email-*` Header 切换或覆盖连接配置，无需重启服务。
+
+## 安装与启动
+
+要求 Node.js 18 或更高版本。
+
+从 npm 全局安装：
+
+```bash
+npm install -g @guangxiangdebizi/email-mcp
+email-mcp-server
+```
+
+从源码运行：
 
 ```bash
 npm install
+cp .env.example .env
 npm run build
+npm start
 ```
 
-或者快速安装：
+默认地址：
+
+```text
+http://localhost:3200/mcp
+```
+
+健康检查：
+
 ```bash
-npm run quick-setup
+curl http://localhost:3200/health
 ```
 
-## ⚙️ 配置
+这是原生 Streamable HTTP MCP，不再需要 SuperGateway，也不是旧的 `/sse` 协议。
 
-1. 复制环境变量模板：
-```bash
-cp env.example .env
-```
+## 单邮箱配置
 
-2. 编辑 `.env` 文件，选择邮件提供商：
+### 163 邮箱
 
-### 选项一：使用QQ邮箱 (推荐)
+先在 163 邮箱设置中启用 SMTP/IMAP，并使用客户端授权码而不是登录密码：
+
 ```env
-EMAIL_PROVIDER=smtp
-SMTP_HOST=smtp.qq.com
-SMTP_PORT=587
-SMTP_SECURE=false
+EMAIL_PROVIDER=imap-smtp
+SMTP_HOST=smtp.163.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your-email@163.com
+SMTP_PASS=your-authorization-code
+IMAP_HOST=imap.163.com
+IMAP_PORT=993
+IMAP_SECURE=true
+IMAP_USER=your-email@163.com
+IMAP_PASS=your-authorization-code
+DEFAULT_FROM_EMAIL=your-email@163.com
+```
+
+对于常见邮箱，可只配置账号和授权码，服务器会根据邮箱域名补全主机、端口和 TLS：
+
+```env
+EMAIL_PROVIDER=imap-smtp
 SMTP_USER=your-email@qq.com
 SMTP_PASS=your-authorization-code
 DEFAULT_FROM_EMAIL=your-email@qq.com
 ```
 
-**QQ邮箱设置步骤：**
-1. 登录QQ邮箱 → 设置 → 账户
-2. 开启SMTP服务
-3. 生成授权码（不是QQ密码）
-4. 将授权码填入`SMTP_PASS`
+当 `IMAP_USER`/`IMAP_PASS` 未设置时，会复用 SMTP 凭据；反向亦然。企业邮箱或自建邮箱
+只需显式填写对应的 `SMTP_*` 和 `IMAP_*` 地址即可。
 
-### 选项二：使用163邮箱
-```env
-EMAIL_PROVIDER=smtp
-SMTP_HOST=smtp.163.com
-SMTP_PORT=994
-SMTP_SECURE=true
-SMTP_USER=your-email@163.com
-SMTP_PASS=your-authorization-code
-DEFAULT_FROM_EMAIL=your-email@163.com
-```
+### Gmail API 兼容模式
 
-### 选项三：使用Gmail
 ```env
-EMAIL_PROVIDER=smtp
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=your-email@gmail.com
-SMTP_PASS=your-app-password
+EMAIL_PROVIDER=gmail-api
+GMAIL_CLIENT_ID=...
+GMAIL_CLIENT_SECRET=...
+GMAIL_REFRESH_TOKEN=...
 DEFAULT_FROM_EMAIL=your-email@gmail.com
 ```
 
-### 选项四：使用Gmail API
+也可只传有效的 `GMAIL_ACCESS_TOKEN`。如果使用 Gmail 的标准 IMAP/SMTP，则将
+`EMAIL_PROVIDER` 设为 `imap-smtp` 并使用应用专用密码。
+
+## 多邮箱切换（不增加工具）
+
+使用 `EMAIL_ACCOUNTS_JSON` 定义命名账号：
+
 ```env
-EMAIL_PROVIDER=gmail
-GMAIL_CLIENT_ID=your-gmail-client-id
-GMAIL_CLIENT_SECRET=your-gmail-client-secret
-GMAIL_REFRESH_TOKEN=your-gmail-refresh-token
-DEFAULT_FROM_EMAIL=your-email@gmail.com
+EMAIL_DEFAULT_ACCOUNT=personal
+EMAIL_ACCOUNTS_JSON={"personal":{"provider":"imap-smtp","from":"me@qq.com","smtp":{"user":"me@qq.com","pass":"qq-code"},"imap":{"user":"me@qq.com","pass":"qq-code"}},"work":{"provider":"imap-smtp","from":"me@outlook.com","smtp":{"user":"me@outlook.com","pass":"work-code"},"imap":{"user":"me@outlook.com","pass":"work-code"}}}
 ```
 
-## 🔧 使用方法
+随后直接在原有工具中选择账号：
 
-### 直接启动
-```bash
-npm run start
+```json
+{
+  "account": "work",
+  "limit": 10,
+  "folder": "INBOX"
+}
 ```
 
-### 使用SuperGateway调试 (推荐)
-```bash
-npm run start-gateway
-```
-服务将在 http://localhost:3200 启动
+`read_emails` 和 `search_emails` 返回的 `messageId` 是不包含密码的定位符，其中保留了
+命名账号和 IMAP 文件夹信息。把它直接传给 `reply_email` 或 `delete_email` 时，通常无需
+再次填写 `account`。
 
-### 在Cline中配置
+## 通过请求头配置或切换邮箱
+
+MCP 客户端可以为 Streamable HTTP 连接设置静态 Header：
+
 ```json
 {
   "mcpServers": {
-    "email-mcp": {
-      "url": "http://localhost:3200/sse",
-      "type": "sse",
-      "disabled": false,
-      "autoApprove": [
-        "send_email",
-        "read_emails", 
-        "search_emails",
-        "delete_email",
-        "reply_email"
-      ]
+    "email": {
+      "type": "streamable-http",
+      "url": "http://localhost:3200/mcp",
+      "headers": {
+        "Authorization": "Bearer your-mcp-api-key",
+        "X-Email-Account": "work"
+      }
     }
   }
 }
 ```
 
-### 开发模式
-```bash
-npm run dev
-```
+也可以完全通过 Header 提供连接信息：
 
-## 🛠️ 可用工具
-
-### 1. send_email
-发送邮件给指定收件人
-
-**参数：**
-- `to` (必需): 收件人邮箱地址
-- `subject` (必需): 邮件主题
-- `body` (必需): 邮件内容
-- `from` (可选): 发件人邮箱地址
-- `html` (可选): 是否为HTML格式
-- `attachments` (可选): 附件数组
-
-**示例：**
 ```json
 {
-  "to": "recipient@qq.com",
-  "subject": "来自AI的问候",
-  "body": "这是一封由AI助手发送的测试邮件。",
-  "html": false
+  "X-Email-Provider": "imap-smtp",
+  "X-Email-From": "me@example.com",
+  "X-Email-SMTP-Host": "smtp.example.com",
+  "X-Email-SMTP-Port": "465",
+  "X-Email-SMTP-Secure": "true",
+  "X-Email-SMTP-User": "me@example.com",
+  "X-Email-SMTP-Pass": "app-password",
+  "X-Email-IMAP-Host": "imap.example.com",
+  "X-Email-IMAP-Port": "993",
+  "X-Email-IMAP-Secure": "true",
+  "X-Email-IMAP-User": "me@example.com",
+  "X-Email-IMAP-Pass": "app-password"
 }
 ```
 
-### 2. read_emails
-从收件箱或指定文件夹读取邮件
+还支持 `X-Email-Config`，值为完整 JSON，或 `base64:<base64url-json>`。可用字段与
+`EMAIL_ACCOUNTS_JSON` 内单个账号相同。
 
-**参数：**
-- `limit` (可选): 邮件数量限制 (默认: 10)
-- `folder` (可选): 邮件文件夹 (默认: "INBOX")
-- `unreadOnly` (可选): 只读取未读邮件 (默认: false)
+配置优先级从高到低：
 
-### 3. search_emails
-搜索邮件
+1. 单独的 `X-Email-*` 连接 Header。
+2. `X-Email-Config`。
+3. `account` 参数或 `X-Email-Account` 选中的命名账号。
+4. 普通环境变量。
 
-**参数：**
-- `query` (必需): 搜索关键词
-- `limit` (可选): 结果数量限制 (默认: 10)
-- `folder` (可选): 搜索文件夹 (默认: "INBOX")
+账号选择优先级为：工具 `account` > `X-Email-Account` > `X-Email-Config.account` >
+`EMAIL_DEFAULT_ACCOUNT`。
 
-### 4. delete_email
-删除邮件
+> Header 中可能包含邮箱授权码。跨机器部署时必须使用 HTTPS，并建议设置
+> `MCP_API_KEY`；不要在日志中打印请求头。
 
-**参数：**
-- `messageId` (必需): 要删除的邮件ID
+## 固定的 5 个工具
 
-### 5. reply_email
-回复邮件
+| 工具 | 用途 | 主要协议 |
+| --- | --- | --- |
+| `send_email` | 发送纯文本/HTML 邮件及附件 | SMTP / Gmail API |
+| `read_emails` | 读取文件夹，可只读未读邮件 | IMAP / Gmail API |
+| `search_emails` | 搜索指定文件夹 | IMAP / Gmail API |
+| `delete_email` | 删除指定邮件 | IMAP / Gmail API |
+| `reply_email` | 回复或回复全部 | IMAP + SMTP / Gmail API |
 
-**参数：**
-- `messageId` (必需): 原邮件ID
-- `body` (必需): 回复内容
-- `replyAll` (可选): 是否回复全部 (默认: false)
-- `html` (可选): 是否为HTML格式 (默认: false)
+五个工具均支持可选 `account` 参数。
 
-## 🔐 支持的邮箱服务
+通用 IMAP 搜索支持普通文本，以及：
 
-| 邮箱服务 | SMTP服务器 | 端口 | 安全连接 | 说明 |
-|---------|------------|------|----------|------|
-| QQ邮箱 | smtp.qq.com | 587 | false | 需要开启SMTP服务并获取授权码 |
-| 163邮箱 | smtp.163.com | 994 | true | 需要开启SMTP服务并获取授权码 |
-| Gmail | smtp.gmail.com | 587 | false | 需要开启两步验证并生成应用密码 |
-| Outlook | smtp-mail.outlook.com | 587 | false | 需要开启SMTP认证 |
+```text
+from:alice@example.com subject:"quarterly report" since:2026-01-01 before:2026-08-01 is:unread
+```
 
-## 🐛 故障排除
+## 服务配置
 
-### 常见问题
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `MCP_HOST` | `0.0.0.0` | HTTP 监听地址 |
+| `MCP_PORT` | `3200` | HTTP 端口 |
+| `MCP_PATH` | `/mcp` | Streamable HTTP 路径 |
+| `MCP_API_KEY` | 空 | 可选 Bearer / `X-MCP-API-Key` 认证 |
+| `MCP_CORS_ORIGIN` | 空 | 可选 CORS 来源，多个值用逗号分隔 |
 
-1. **QQ邮箱认证失败**
-   - 确保已开启SMTP服务
-   - 使用授权码而不是QQ密码
-   - 检查SMTP设置是否正确
+## 验证
 
-2. **163邮箱认证失败**
-   - 确保已开启SMTP服务
-   - 使用客户端授权密码
-   - 注意端口使用994并开启SSL
+```bash
+npm test
+```
 
-3. **Gmail认证失败**
-   - 确保启用了"应用密码"
-   - 开启两步验证
-   - 检查SMTP设置是否正确
-
-4. **Gmail API错误**
-   - 确保OAuth令牌有效
-   - 检查API配额和权限
-
-5. **TypeScript编译错误**
-   - 运行 `npm install` 确保依赖安装完整
-   - 检查Node.js版本 (推荐 v18+)
-
-## 🔗 相关链接
-
-- [Model Context Protocol](https://github.com/anthropics/mcp)
-- [SuperGateway](https://supergateway.ai)
-- [Gmail API文档](https://developers.google.com/gmail/api)
-- [QQ邮箱SMTP设置](https://service.mail.qq.com/cgi-bin/help?subtype=1&&id=28&&no=1001256)
-
-## �� 许可证
-
-ISC License 
+共 10 项自动化测试，覆盖配置优先级、163 IMAP 泛化、命名账号切换、请求头覆盖、消息
+定位符、搜索语法、标准 IMAP 读/搜/删、SMTP 发/回、Streamable HTTP 初始化和工具数量
+不变约束。
