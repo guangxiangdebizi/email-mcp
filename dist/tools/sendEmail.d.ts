@@ -1,19 +1,11 @@
-interface SendEmailArgs {
-    to: string;
-    subject: string;
-    body: string;
-    from?: string;
-    html?: boolean;
-    attachments?: Array<{
-        filename: string;
-        path?: string;
-        content?: string;
-    }>;
+import { type SendEmailInput } from "../email/emailService.js";
+import { type EmailConfigResolver } from "./toolResult.js";
+export interface SendEmailArgs extends SendEmailInput {
+    account?: string;
 }
-export declare function createSendEmailTool(): (args: SendEmailArgs) => Promise<{
+export declare function createSendEmailTool(resolveConfig: EmailConfigResolver): ({ account, ...input }: SendEmailArgs) => Promise<{
     content: {
-        type: string;
+        type: "text";
         text: string;
     }[];
 }>;
-export {};

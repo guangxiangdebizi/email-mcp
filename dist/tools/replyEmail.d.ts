@@ -1,13 +1,11 @@
-interface ReplyEmailArgs {
-    messageId: string;
-    body: string;
-    replyAll: boolean;
-    html: boolean;
+import { type ReplyEmailInput } from "../email/emailService.js";
+import { type EmailConfigResolver } from "./toolResult.js";
+export interface ReplyEmailArgs extends ReplyEmailInput {
+    account?: string;
 }
-export declare function createReplyEmailTool(): (args: ReplyEmailArgs) => Promise<{
+export declare function createReplyEmailTool(resolveConfig: EmailConfigResolver): ({ account, ...input }: ReplyEmailArgs) => Promise<{
     content: {
-        type: string;
+        type: "text";
         text: string;
     }[];
 }>;
-export {};

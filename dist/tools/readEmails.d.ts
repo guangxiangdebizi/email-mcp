@@ -1,12 +1,11 @@
-interface ReadEmailsArgs {
-    limit: number;
-    folder: string;
-    unreadOnly: boolean;
+import { type ReadEmailsInput } from "../email/emailService.js";
+import { type EmailConfigResolver } from "./toolResult.js";
+export interface ReadEmailsArgs extends ReadEmailsInput {
+    account?: string;
 }
-export declare function createReadEmailsTool(): (args: ReadEmailsArgs) => Promise<{
+export declare function createReadEmailsTool(resolveConfig: EmailConfigResolver): ({ account, ...input }: ReadEmailsArgs) => Promise<{
     content: {
-        type: string;
+        type: "text";
         text: string;
     }[];
 }>;
-export {};

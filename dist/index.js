@@ -1,249 +1,320 @@
 #!/usr/bin/env node
+import { timingSafeEqual } from "node:crypto";
+import { createServer as createNodeHttpServer } from "node:http";
+import { pathToFileURL } from "node:url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
 import dotenv from "dotenv";
-// Import email tools
-import { createSendEmailTool } from "./tools/sendEmail.js";
-import { createReadEmailsTool } from "./tools/readEmails.js";
-import { createSearchEmailsTool } from "./tools/searchEmails.js";
+import { z } from "zod";
+import { EMAIL_CONFIG_HEADERS, resolveEmailConfig } from "./config.js";
 import { createDeleteEmailTool } from "./tools/deleteEmail.js";
+import { createReadEmailsTool } from "./tools/readEmails.js";
 import { createReplyEmailTool } from "./tools/replyEmail.js";
-// Load environment variables
-dotenv.config();
-// Validation schemas
+import { createSearchEmailsTool } from "./tools/searchEmails.js";
+import { createSendEmailTool } from "./tools/sendEmail.js";
+dotenv.config({ quiet: true });
+const AccountSchema = z.string().min(1).max(128).optional();
 const SendEmailSchema = z.object({
+    account: AccountSchema,
     to: z.string().email(),
-    subject: z.string(),
+    subject: z.string().max(998),
     body: z.string(),
     from: z.string().email().optional(),
-    html: z.boolean().optional(),
-    attachments: z.array(z.object({
-        filename: z.string(),
+    html: z.boolean().optional().default(false),
+    attachments: z
+        .array(z.object({
+        filename: z.string().min(1),
         path: z.string().optional(),
         content: z.string().optional(),
-    })).optional(),
+    }))
+        .max(20)
+        .optional(),
 });
 const ReadEmailsSchema = z.object({
-    limit: z.number().optional().default(10),
-    folder: z.string().optional().default("INBOX"),
+    account: AccountSchema,
+    limit: z.number().int().min(1).max(100).optional().default(10),
+    folder: z.string().min(1).optional().default("INBOX"),
     unreadOnly: z.boolean().optional().default(false),
 });
 const SearchEmailsSchema = z.object({
-    query: z.string(),
-    limit: z.number().optional().default(10),
-    folder: z.string().optional().default("INBOX"),
+    account: AccountSchema,
+    query: z.string().min(1),
+    limit: z.number().int().min(1).max(100).optional().default(10),
+    folder: z.string().min(1).optional().default("INBOX"),
 });
 const DeleteEmailSchema = z.object({
-    messageId: z.string(),
+    account: AccountSchema,
+    messageId: z.string().min(1),
 });
 const ReplyEmailSchema = z.object({
-    messageId: z.string(),
+    account: AccountSchema,
+    messageId: z.string().min(1),
     body: z.string(),
     replyAll: z.boolean().optional().default(false),
     html: z.boolean().optional().default(false),
 });
-class EmailMCPServer {
-    server;
-    constructor() {
-        this.server = new Server({
-            name: "email-mcp-server",
-            version: "1.0.0",
-        }, {
-            capabilities: {
-                tools: {},
+const accountProperty = {
+    type: "string",
+    description: "Optional named account from EMAIL_ACCOUNTS_JSON. Overrides X-Email-Account for this call.",
+};
+export const EMAIL_TOOLS = [
+    {
+        name: "send_email",
+        description: "Send an email through the selected account using SMTP or Gmail API.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                account: accountProperty,
+                to: { type: "string", format: "email", description: "Recipient email address." },
+                subject: { type: "string", description: "Email subject." },
+                body: { type: "string", description: "Email body." },
+                from: { type: "string", format: "email", description: "Optional sender override." },
+                html: { type: "boolean", description: "Treat body as HTML when true." },
+                attachments: {
+                    type: "array",
+                    description: "Optional attachments from a local path or string content.",
+                    items: {
+                        type: "object",
+                        properties: {
+                            filename: { type: "string" },
+                            path: { type: "string" },
+                            content: { type: "string" },
+                        },
+                        required: ["filename"],
+                    },
+                },
             },
-        });
-        this.setupHandlers();
-    }
-    setupHandlers() {
-        // List available tools
-        this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-            const tools = [
-                {
-                    name: "send_email",
-                    description: "Send an email to specified recipients",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            to: {
-                                type: "string",
-                                description: "Recipient email address",
-                            },
-                            subject: {
-                                type: "string",
-                                description: "Email subject",
-                            },
-                            body: {
-                                type: "string",
-                                description: "Email body content",
-                            },
-                            from: {
-                                type: "string",
-                                description: "Sender email address (optional)",
-                            },
-                            html: {
-                                type: "boolean",
-                                description: "Whether the body is HTML format",
-                            },
-                            attachments: {
-                                type: "array",
-                                description: "Email attachments",
-                                items: {
-                                    type: "object",
-                                    properties: {
-                                        filename: { type: "string" },
-                                        path: { type: "string" },
-                                        content: { type: "string" },
-                                    },
-                                },
-                            },
-                        },
-                        required: ["to", "subject", "body"],
-                    },
-                },
-                {
-                    name: "read_emails",
-                    description: "Read emails from inbox or specified folder",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            limit: {
-                                type: "number",
-                                description: "Number of emails to retrieve (default: 10)",
-                            },
-                            folder: {
-                                type: "string",
-                                description: "Email folder to read from (default: INBOX)",
-                            },
-                            unreadOnly: {
-                                type: "boolean",
-                                description: "Only retrieve unread emails",
-                            },
-                        },
-                    },
-                },
-                {
-                    name: "search_emails",
-                    description: "Search emails by query",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            query: {
-                                type: "string",
-                                description: "Search query",
-                            },
-                            limit: {
-                                type: "number",
-                                description: "Number of results to return (default: 10)",
-                            },
-                            folder: {
-                                type: "string",
-                                description: "Folder to search in (default: INBOX)",
-                            },
-                        },
-                        required: ["query"],
-                    },
-                },
-                {
-                    name: "delete_email",
-                    description: "Delete an email by message ID",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            messageId: {
-                                type: "string",
-                                description: "Email message ID to delete",
-                            },
-                        },
-                        required: ["messageId"],
-                    },
-                },
-                {
-                    name: "reply_email",
-                    description: "Reply to an email",
-                    inputSchema: {
-                        type: "object",
-                        properties: {
-                            messageId: {
-                                type: "string",
-                                description: "Original message ID to reply to",
-                            },
-                            body: {
-                                type: "string",
-                                description: "Reply body content",
-                            },
-                            replyAll: {
-                                type: "boolean",
-                                description: "Reply to all recipients",
-                            },
-                            html: {
-                                type: "boolean",
-                                description: "Whether the body is HTML format",
-                            },
-                        },
-                        required: ["messageId", "body"],
-                    },
-                },
-            ];
-            return { tools };
-        });
-        // Handle tool calls
-        this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-            try {
-                switch (request.params.name) {
-                    case "send_email": {
-                        const args = SendEmailSchema.parse(request.params.arguments);
-                        const sendEmailTool = createSendEmailTool();
-                        return await sendEmailTool(args);
-                    }
-                    case "read_emails": {
-                        const args = ReadEmailsSchema.parse(request.params.arguments || {});
-                        const readEmailsTool = createReadEmailsTool();
-                        return await readEmailsTool(args);
-                    }
-                    case "search_emails": {
-                        const args = SearchEmailsSchema.parse(request.params.arguments);
-                        const searchEmailsTool = createSearchEmailsTool();
-                        return await searchEmailsTool(args);
-                    }
-                    case "delete_email": {
-                        const args = DeleteEmailSchema.parse(request.params.arguments);
-                        const deleteEmailTool = createDeleteEmailTool();
-                        return await deleteEmailTool(args);
-                    }
-                    case "reply_email": {
-                        const args = ReplyEmailSchema.parse(request.params.arguments);
-                        const replyEmailTool = createReplyEmailTool();
-                        return await replyEmailTool(args);
-                    }
-                    default:
-                        throw new Error(`Unknown tool: ${request.params.name}`);
-                }
+            required: ["to", "subject", "body"],
+        },
+    },
+    {
+        name: "read_emails",
+        description: "Read messages through Gmail API or any standard IMAP mailbox.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                account: accountProperty,
+                limit: { type: "number", minimum: 1, maximum: 100, description: "Maximum messages." },
+                folder: { type: "string", description: "Mailbox folder; defaults to INBOX." },
+                unreadOnly: { type: "boolean", description: "Return only unread messages." },
+            },
+        },
+    },
+    {
+        name: "search_emails",
+        description: "Search email. IMAP supports text plus from:, to:, cc:, subject:, since:, before:, and is: filters.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                account: accountProperty,
+                query: { type: "string", description: "Search text or provider-supported query." },
+                limit: { type: "number", minimum: 1, maximum: 100, description: "Maximum messages." },
+                folder: { type: "string", description: "Mailbox folder; defaults to INBOX." },
+            },
+            required: ["query"],
+        },
+    },
+    {
+        name: "delete_email",
+        description: "Permanently delete a message returned by read_emails or search_emails.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                account: accountProperty,
+                messageId: { type: "string", description: "Opaque messageId returned by this server." },
+            },
+            required: ["messageId"],
+        },
+    },
+    {
+        name: "reply_email",
+        description: "Reply to a message through SMTP or Gmail API, with optional reply-all.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                account: accountProperty,
+                messageId: { type: "string", description: "Opaque messageId returned by this server." },
+                body: { type: "string", description: "Reply body." },
+                replyAll: { type: "boolean", description: "Include the original To/Cc recipients." },
+                html: { type: "boolean", description: "Treat body as HTML when true." },
+            },
+            required: ["messageId", "body"],
+        },
+    },
+];
+export function createEmailMcpServer(headers = {}, env = process.env) {
+    const server = new Server({ name: "email-mcp-server", version: "2.0.0" }, {
+        capabilities: { tools: {} },
+        instructions: "Use the optional account argument to select an EMAIL_ACCOUNTS_JSON account. " +
+            "The server also accepts per-request X-Email-* connection headers.",
+    });
+    const resolveConfig = (account) => resolveEmailConfig({ env, headers, account });
+    const sendEmail = createSendEmailTool(resolveConfig);
+    const readEmails = createReadEmailsTool(resolveConfig);
+    const searchEmails = createSearchEmailsTool(resolveConfig);
+    const deleteEmail = createDeleteEmailTool(resolveConfig);
+    const replyEmail = createReplyEmailTool(resolveConfig);
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: EMAIL_TOOLS }));
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        try {
+            switch (request.params.name) {
+                case "send_email":
+                    return sendEmail(SendEmailSchema.parse(request.params.arguments));
+                case "read_emails":
+                    return readEmails(ReadEmailsSchema.parse(request.params.arguments ?? {}));
+                case "search_emails":
+                    return searchEmails(SearchEmailsSchema.parse(request.params.arguments));
+                case "delete_email":
+                    return deleteEmail(DeleteEmailSchema.parse(request.params.arguments));
+                case "reply_email":
+                    return replyEmail(ReplyEmailSchema.parse(request.params.arguments));
+                default:
+                    return {
+                        isError: true,
+                        content: [{ type: "text", text: `Unknown tool: ${request.params.name}` }],
+                    };
             }
-            catch (error) {
-                const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-                return {
-                    content: [
-                        {
-                            type: "text",
-                            text: `Error: ${errorMessage}`,
-                        },
-                    ],
-                };
-            }
-        });
-    }
-    async run() {
-        const transport = new StdioServerTransport();
-        await this.server.connect(transport);
-        console.error("Email MCP Server running on stdio");
-    }
+        }
+        catch (error) {
+            const detail = error instanceof Error ? error.message : "Invalid tool arguments";
+            return {
+                isError: true,
+                content: [{ type: "text", text: `Invalid tool arguments: ${detail}` }],
+            };
+        }
+    });
+    return server;
 }
-// Start the server
-const server = new EmailMCPServer();
-server.run().catch((error) => {
-    console.error("Server error:", error);
-    process.exit(1);
-});
+function writeJson(res, status, value) {
+    res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(value));
+}
+function isAuthorized(req, env) {
+    const expected = env.MCP_API_KEY;
+    if (!expected)
+        return true;
+    const authorization = req.headers.authorization;
+    const supplied = (authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined) ??
+        (Array.isArray(req.headers["x-mcp-api-key"])
+            ? req.headers["x-mcp-api-key"][0]
+            : req.headers["x-mcp-api-key"]);
+    if (!supplied)
+        return false;
+    const expectedBytes = Buffer.from(expected);
+    const suppliedBytes = Buffer.from(supplied);
+    return expectedBytes.length === suppliedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes);
+}
+function applyCors(req, res, env) {
+    const configured = env.MCP_CORS_ORIGIN;
+    if (!configured)
+        return;
+    const origin = req.headers.origin;
+    const allowed = configured.split(",").map((value) => value.trim());
+    if (configured === "*" || (origin && allowed.includes(origin))) {
+        res.setHeader("Access-Control-Allow-Origin", configured === "*" ? "*" : origin);
+        res.setHeader("Vary", "Origin");
+    }
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", [
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Mcp-Session-Id",
+        "Last-Event-ID",
+        "X-MCP-API-Key",
+        ...EMAIL_CONFIG_HEADERS,
+    ].join(", "));
+    res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
+}
+export function createHttpServer(options = {}) {
+    const env = options.env ?? process.env;
+    const configuredPath = env.MCP_PATH || "/mcp";
+    const mcpPath = configuredPath.startsWith("/") ? configuredPath : `/${configuredPath}`;
+    return createNodeHttpServer(async (req, res) => {
+        applyCors(req, res, env);
+        const url = new URL(req.url ?? "/", "http://localhost");
+        if (url.pathname === "/health" && req.method === "GET") {
+            writeJson(res, 200, {
+                ok: true,
+                name: "email-mcp-server",
+                version: "2.0.0",
+                transport: "streamable-http",
+                endpoint: mcpPath,
+                toolCount: EMAIL_TOOLS.length,
+            });
+            return;
+        }
+        if (url.pathname !== mcpPath) {
+            writeJson(res, 404, { error: "Not found" });
+            return;
+        }
+        if (req.method === "OPTIONS") {
+            res.writeHead(204).end();
+            return;
+        }
+        if (!isAuthorized(req, env)) {
+            res.setHeader("WWW-Authenticate", "Bearer");
+            writeJson(res, 401, { error: "Unauthorized" });
+            return;
+        }
+        if (req.method !== "POST") {
+            res.setHeader("Allow", "POST, OPTIONS");
+            writeJson(res, 405, {
+                jsonrpc: "2.0",
+                error: { code: -32000, message: "Method not allowed in stateless Streamable HTTP mode" },
+                id: null,
+            });
+            return;
+        }
+        const mcpServer = createEmailMcpServer(req.headers, env);
+        const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: undefined,
+            enableJsonResponse: true,
+        });
+        res.once("close", () => void mcpServer.close().catch(() => undefined));
+        try {
+            await mcpServer.connect(transport);
+            await transport.handleRequest(req, res);
+        }
+        catch (error) {
+            console.error("MCP request failed:", error instanceof Error ? error.message : error);
+            if (!res.headersSent) {
+                writeJson(res, 500, {
+                    jsonrpc: "2.0",
+                    error: { code: -32603, message: "Internal server error" },
+                    id: null,
+                });
+            }
+        }
+    });
+}
+export async function startHttpServer(env = process.env) {
+    const host = env.MCP_HOST || "0.0.0.0";
+    const port = Number(env.MCP_PORT || "3200");
+    if (!Number.isInteger(port) || port < 0 || port > 65535) {
+        throw new Error("MCP_PORT must be an integer between 0 and 65535");
+    }
+    const httpServer = createHttpServer({ env });
+    await new Promise((resolve, reject) => {
+        httpServer.once("error", reject);
+        httpServer.listen(port, host, resolve);
+    });
+    const address = httpServer.address();
+    const actualPort = typeof address === "object" && address ? address.port : port;
+    console.error(`Email MCP Server listening on http://${host}:${actualPort}${env.MCP_PATH || "/mcp"}`);
+    return httpServer;
+}
+async function main() {
+    const httpServer = await startHttpServer();
+    const shutdown = () => httpServer.close(() => process.exit(0));
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
+}
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+    main().catch((error) => {
+        console.error("Server error:", error);
+        process.exit(1);
+    });
+}
