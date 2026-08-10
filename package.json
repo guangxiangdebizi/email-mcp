@@ -1,5 +1,5 @@
 {
-  "name": "@guangxiangdebizi/email-mcp",
+  "name": "@xingyuchen/email-mcp",
   "version": "2.0.0",
   "description": "Provider-neutral email MCP server over Streamable HTTP",
   "type": "module",

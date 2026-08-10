@@ -22,7 +22,7 @@ Gmail API，因此 163 等邮箱只能发信。当前实现改为：
 从 npm 全局安装：
 
 ```bash
-npm install -g @guangxiangdebizi/email-mcp
+npm install -g @xingyuchen/email-mcp
 email-mcp-server
 ```
 
