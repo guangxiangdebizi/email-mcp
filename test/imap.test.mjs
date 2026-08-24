@@ -109,6 +109,8 @@ test("all mailbox operations work with standard IMAP and SMTP", async () => {
       account: "mock-163",
       provider: "imap-smtp",
       defaultFrom: "bob@example.com",
+      allowInsecureTransport: true,
+      allowInvalidTlsCertificates: false,
       imap: {
         host: "127.0.0.1",
         port: imapPort,

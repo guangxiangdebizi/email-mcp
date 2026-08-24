@@ -34,6 +34,8 @@ test("send_email delivers a real SMTP message", async () => {
     const service = new EmailService({
       provider: "imap-smtp",
       defaultFrom: "sender@example.test",
+      allowInsecureTransport: true,
+      allowInvalidTlsCertificates: false,
       smtp: {
         host: "127.0.0.1",
         port,

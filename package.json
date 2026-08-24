@@ -1,6 +1,6 @@
 {
   "name": "@xingyuchen/email-mcp",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Provider-neutral email MCP server over Streamable HTTP",
   "type": "module",
   "main": "dist/index.js",
@@ -61,6 +61,9 @@
     "smtp-server": "^3.19.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
+  },
+  "overrides": {
+    "html-to-text": "10.0.1"
   },
   "directories": {
     "test": "test"

@@ -2,6 +2,7 @@
 
 import { timingSafeEqual } from "node:crypto";
 import { createServer as createNodeHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer as createNodeHttpsServer, type ServerOptions as HttpsServerOptions } from "node:https";
 import { pathToFileURL } from "node:url";
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -20,6 +21,12 @@ import { createReadEmailsTool } from "./tools/readEmails.js";
 import { createReplyEmailTool } from "./tools/replyEmail.js";
 import { createSearchEmailsTool } from "./tools/searchEmails.js";
 import { createSendEmailTool } from "./tools/sendEmail.js";
+import {
+  applySecurityHeaders,
+  assertSecureDeployment,
+  loadTlsServerOptions,
+  requestUsesTls,
+} from "./security.js";
 
 dotenv.config({ quiet: true });
 
@@ -164,7 +171,7 @@ export function createEmailMcpServer(
   env: NodeJS.ProcessEnv = process.env,
 ): Server {
   const server = new Server(
-    { name: "email-mcp-server", version: "2.0.0" },
+    { name: "email-mcp-server", version: "2.1.0" },
     {
       capabilities: { tools: {} },
       instructions:
@@ -257,14 +264,19 @@ function applyCors(req: IncomingMessage, res: ServerResponse, env: NodeJS.Proces
 
 export interface HttpServerOptions {
   env?: NodeJS.ProcessEnv;
+  tls?: HttpsServerOptions;
 }
 
 export function createHttpServer(options: HttpServerOptions = {}) {
   const env = options.env ?? process.env;
+  const host = env.MCP_HOST || "127.0.0.1";
   const configuredPath = env.MCP_PATH || "/mcp";
   const mcpPath = configuredPath.startsWith("/") ? configuredPath : `/${configuredPath}`;
+  const tlsOptions = options.tls ?? loadTlsServerOptions(env);
+  assertSecureDeployment(env, host, Boolean(tlsOptions));
 
-  return createNodeHttpServer(async (req, res) => {
+  const requestListener = async (req: IncomingMessage, res: ServerResponse) => {
+    applySecurityHeaders(req, res, env);
     applyCors(req, res, env);
     const url = new URL(req.url ?? "/", "http://localhost");
 
@@ -272,8 +284,9 @@ export function createHttpServer(options: HttpServerOptions = {}) {
       writeJson(res, 200, {
         ok: true,
         name: "email-mcp-server",
-        version: "2.0.0",
+        version: "2.1.0",
         transport: "streamable-http",
+        tls: requestUsesTls(req, env),
         endpoint: mcpPath,
         toolCount: EMAIL_TOOLS.length,
       });
@@ -321,23 +334,35 @@ export function createHttpServer(options: HttpServerOptions = {}) {
         });
       }
     }
-  });
+  };
+
+  const server = tlsOptions
+    ? createNodeHttpsServer({ ...tlsOptions, maxHeaderSize: 32 * 1024 }, requestListener)
+    : createNodeHttpServer({ maxHeaderSize: 32 * 1024 }, requestListener);
+  server.headersTimeout = 15_000;
+  server.requestTimeout = 120_000;
+  server.keepAliveTimeout = 5_000;
+  server.maxRequestsPerSocket = 100;
+  return server;
 }
 
 export async function startHttpServer(env: NodeJS.ProcessEnv = process.env) {
-  const host = env.MCP_HOST || "0.0.0.0";
+  const host = env.MCP_HOST || "127.0.0.1";
   const port = Number(env.MCP_PORT || "3200");
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error("MCP_PORT must be an integer between 0 and 65535");
   }
-  const httpServer = createHttpServer({ env });
+  const tls = loadTlsServerOptions(env);
+  assertSecureDeployment(env, host, Boolean(tls));
+  const httpServer = createHttpServer({ env, ...(tls ? { tls } : {}) });
   await new Promise<void>((resolve, reject) => {
     httpServer.once("error", reject);
     httpServer.listen(port, host, resolve);
   });
   const address = httpServer.address();
   const actualPort = typeof address === "object" && address ? address.port : port;
-  console.error(`Email MCP Server listening on http://${host}:${actualPort}${env.MCP_PATH || "/mcp"}`);
+  const scheme = tls ? "https" : "http";
+  console.error(`Email MCP Server listening on ${scheme}://${host}:${actualPort}${env.MCP_PATH || "/mcp"}`);
   return httpServer;
 }
 

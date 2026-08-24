@@ -35,7 +35,7 @@ npm run build
 npm start
 ```
 
-默认地址：
+默认仅监听本机回环地址：
 
 ```text
 http://localhost:3200/mcp
@@ -48,6 +48,34 @@ curl http://localhost:3200/health
 ```
 
 这是原生 Streamable HTTP MCP，不再需要 SuperGateway，也不是旧的 `/sse` 协议。
+
+### 原生 HTTPS（跨机器部署必须启用）
+
+配置服务器证书和私钥后，服务会直接启动为 HTTPS。TLS 会加密完整 HTTP 请求，包括
+`Authorization`、所有 `X-Email-*` 请求头以及 JSON-RPC 正文，服务端解密后仍按原有方式
+解析和使用这些字段：
+
+```env
+MCP_HOST=0.0.0.0
+MCP_PORT=3200
+MCP_API_KEY=replace-with-at-least-32-random-bytes
+MCP_TLS_KEY_PATH=/etc/email-mcp/tls/server.key
+MCP_TLS_CERT_PATH=/etc/email-mcp/tls/server.crt
+MCP_TLS_MIN_VERSION=TLSv1.2
+```
+
+客户端连接：
+
+```text
+https://mail-mcp.example.com:3200/mcp
+```
+
+证书必须由客户端信任，并且证书域名必须与 URL 主机名匹配。只配置证书或只配置私钥会
+拒绝启动。非回环地址上的明文 HTTP 也会默认拒绝启动。
+
+也可以由 Nginx、Caddy 或负载均衡器终止 HTTPS，此时保持 `MCP_HOST=127.0.0.1`，只允许
+代理通过本机回环访问后端。只有代理可信且会覆盖 `X-Forwarded-Proto` 时才设置
+`MCP_TRUST_PROXY=true`。如果要求 TLS 一直终止到 Node.js 进程，请使用上述原生 HTTPS。
 
 ## 单邮箱配置
 
@@ -127,7 +155,7 @@ MCP 客户端可以为 Streamable HTTP 连接设置静态 Header：
   "mcpServers": {
     "email": {
       "type": "streamable-http",
-      "url": "http://localhost:3200/mcp",
+      "url": "https://mail-mcp.example.com:3200/mcp",
       "headers": {
         "Authorization": "Bearer your-mcp-api-key",
         "X-Email-Account": "work"
@@ -157,7 +185,8 @@ MCP 客户端可以为 Streamable HTTP 连接设置静态 Header：
 ```
 
 还支持 `X-Email-Config`，值为完整 JSON，或 `base64:<base64url-json>`。可用字段与
-`EMAIL_ACCOUNTS_JSON` 内单个账号相同。
+`EMAIL_ACCOUNTS_JSON` 内单个账号相同。Base64url 只是编码，不是加密；机密性由 HTTPS
+提供。
 
 配置优先级从高到低：
 
@@ -194,11 +223,20 @@ from:alice@example.com subject:"quarterly report" since:2026-01-01 before:2026-0
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `MCP_HOST` | `0.0.0.0` | HTTP 监听地址 |
-| `MCP_PORT` | `3200` | HTTP 端口 |
+| `MCP_HOST` | `127.0.0.1` | HTTP/HTTPS 监听地址 |
+| `MCP_PORT` | `3200` | HTTP/HTTPS 端口 |
 | `MCP_PATH` | `/mcp` | Streamable HTTP 路径 |
-| `MCP_API_KEY` | 空 | 可选 Bearer / `X-MCP-API-Key` 认证 |
+| `MCP_API_KEY` | 空 | Bearer / `X-MCP-API-Key`；非回环部署必须至少 32 字节 |
 | `MCP_CORS_ORIGIN` | 空 | 可选 CORS 来源，多个值用逗号分隔 |
+| `MCP_TLS_KEY_PATH` | 空 | 原生 HTTPS 私钥文件；必须与证书同时配置 |
+| `MCP_TLS_CERT_PATH` | 空 | 原生 HTTPS 证书链文件 |
+| `MCP_TLS_KEY_PASSPHRASE` | 空 | 可选私钥口令 |
+| `MCP_TLS_MIN_VERSION` | `TLSv1.2` | 允许 `TLSv1.2` 或 `TLSv1.3` |
+| `MCP_TLS_CA_PATH` | 空 | 可选 mTLS 客户端 CA |
+| `MCP_TLS_REQUIRE_CLIENT_CERT` | `false` | 是否强制验证客户端证书 |
+| `MCP_TRUST_PROXY` | `false` | 是否信任代理提供的 `X-Forwarded-Proto` |
+| `EMAIL_ALLOW_INSECURE_TRANSPORT` | `false` | 仅测试用；允许不使用 TLS 的 SMTP/IMAP |
+| `EMAIL_ALLOW_INVALID_TLS_CERTIFICATES` | `false` | 仅测试用；允许关闭邮箱服务器证书校验 |
 
 ## 验证
 
@@ -206,6 +244,6 @@ from:alice@example.com subject:"quarterly report" since:2026-01-01 before:2026-0
 npm test
 ```
 
-共 10 项自动化测试，覆盖配置优先级、163 IMAP 泛化、命名账号切换、请求头覆盖、消息
-定位符、搜索语法、标准 IMAP 读/搜/删、SMTP 发/回、Streamable HTTP 初始化和工具数量
-不变约束。
+共 15 项自动化测试，覆盖配置优先级、163 IMAP 泛化、命名账号切换、请求头覆盖、消息
+定位符、搜索语法、标准 IMAP 读/搜/删、SMTP 发/回、HTTP/HTTPS Streamable HTTP、网络部署
+安全策略、证书校验保护、强制 STARTTLS 和工具数量不变约束。

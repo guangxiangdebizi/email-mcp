@@ -20,6 +20,8 @@ export interface EmailConfig {
     account?: string;
     provider: EmailProvider;
     defaultFrom: string;
+    allowInsecureTransport: boolean;
+    allowInvalidTlsCertificates: boolean;
     smtp?: MailServerConfig;
     imap?: MailServerConfig;
     gmail?: GmailApiConfig;

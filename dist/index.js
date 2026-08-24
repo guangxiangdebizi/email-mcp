@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { timingSafeEqual } from "node:crypto";
 import { createServer as createNodeHttpServer } from "node:http";
+import { createServer as createNodeHttpsServer } from "node:https";
 import { pathToFileURL } from "node:url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -13,6 +14,7 @@ import { createReadEmailsTool } from "./tools/readEmails.js";
 import { createReplyEmailTool } from "./tools/replyEmail.js";
 import { createSearchEmailsTool } from "./tools/searchEmails.js";
 import { createSendEmailTool } from "./tools/sendEmail.js";
+import { applySecurityHeaders, assertSecureDeployment, loadTlsServerOptions, requestUsesTls, } from "./security.js";
 dotenv.config({ quiet: true });
 const AccountSchema = z.string().min(1).max(128).optional();
 const SendEmailSchema = z.object({
@@ -144,7 +146,7 @@ export const EMAIL_TOOLS = [
     },
 ];
 export function createEmailMcpServer(headers = {}, env = process.env) {
-    const server = new Server({ name: "email-mcp-server", version: "2.0.0" }, {
+    const server = new Server({ name: "email-mcp-server", version: "2.1.0" }, {
         capabilities: { tools: {} },
         instructions: "Use the optional account argument to select an EMAIL_ACCOUNTS_JSON account. " +
             "The server also accepts per-request X-Email-* connection headers.",
@@ -229,17 +231,22 @@ function applyCors(req, res, env) {
 }
 export function createHttpServer(options = {}) {
     const env = options.env ?? process.env;
+    const host = env.MCP_HOST || "127.0.0.1";
     const configuredPath = env.MCP_PATH || "/mcp";
     const mcpPath = configuredPath.startsWith("/") ? configuredPath : `/${configuredPath}`;
-    return createNodeHttpServer(async (req, res) => {
+    const tlsOptions = options.tls ?? loadTlsServerOptions(env);
+    assertSecureDeployment(env, host, Boolean(tlsOptions));
+    const requestListener = async (req, res) => {
+        applySecurityHeaders(req, res, env);
         applyCors(req, res, env);
         const url = new URL(req.url ?? "/", "http://localhost");
         if (url.pathname === "/health" && req.method === "GET") {
             writeJson(res, 200, {
                 ok: true,
                 name: "email-mcp-server",
-                version: "2.0.0",
+                version: "2.1.0",
                 transport: "streamable-http",
+                tls: requestUsesTls(req, env),
                 endpoint: mcpPath,
                 toolCount: EMAIL_TOOLS.length,
             });
@@ -287,22 +294,33 @@ export function createHttpServer(options = {}) {
                 });
             }
         }
-    });
+    };
+    const server = tlsOptions
+        ? createNodeHttpsServer({ ...tlsOptions, maxHeaderSize: 32 * 1024 }, requestListener)
+        : createNodeHttpServer({ maxHeaderSize: 32 * 1024 }, requestListener);
+    server.headersTimeout = 15_000;
+    server.requestTimeout = 120_000;
+    server.keepAliveTimeout = 5_000;
+    server.maxRequestsPerSocket = 100;
+    return server;
 }
 export async function startHttpServer(env = process.env) {
-    const host = env.MCP_HOST || "0.0.0.0";
+    const host = env.MCP_HOST || "127.0.0.1";
     const port = Number(env.MCP_PORT || "3200");
     if (!Number.isInteger(port) || port < 0 || port > 65535) {
         throw new Error("MCP_PORT must be an integer between 0 and 65535");
     }
-    const httpServer = createHttpServer({ env });
+    const tls = loadTlsServerOptions(env);
+    assertSecureDeployment(env, host, Boolean(tls));
+    const httpServer = createHttpServer({ env, ...(tls ? { tls } : {}) });
     await new Promise((resolve, reject) => {
         httpServer.once("error", reject);
         httpServer.listen(port, host, resolve);
     });
     const address = httpServer.address();
     const actualPort = typeof address === "object" && address ? address.port : port;
-    console.error(`Email MCP Server listening on http://${host}:${actualPort}${env.MCP_PATH || "/mcp"}`);
+    const scheme = tls ? "https" : "http";
+    console.error(`Email MCP Server listening on ${scheme}://${host}:${actualPort}${env.MCP_PATH || "/mcp"}`);
     return httpServer;
 }
 async function main() {

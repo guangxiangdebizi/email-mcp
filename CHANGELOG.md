@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0 - 2026-08-24
+
+### Security
+
+- Added native HTTPS with TLS 1.2+ and optional mutual TLS.
+- Changed the default listener from `0.0.0.0` to `127.0.0.1`.
+- Refuse plaintext HTTP, missing authentication, and weak API keys on network listeners unless explicitly overridden.
+- Require STARTTLS for non-direct-TLS SMTP and IMAP connections.
+- Prevent request headers from disabling mail-server certificate validation without a server-side opt-in.
+- Added no-store, HSTS, MIME-sniffing, framing, referrer, and content-security response headers.
+- Overrode the vulnerable transitive `html-to-text` release with its patched version; `npm audit` reports zero vulnerabilities.
+
 ## 2.0.0 - 2026-08-10
 
 ### Added

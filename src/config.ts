@@ -24,6 +24,8 @@ export interface EmailConfig {
   account?: string;
   provider: EmailProvider;
   defaultFrom: string;
+  allowInsecureTransport: boolean;
+  allowInvalidTlsCertificates: boolean;
   smtp?: MailServerConfig;
   imap?: MailServerConfig;
   gmail?: GmailApiConfig;
@@ -418,17 +420,33 @@ export function resolveEmailConfig(options: ResolveEmailConfigOptions = {}): Ema
     account: selectedAccount,
     provider,
     defaultFrom: partial.defaultFrom ?? smtp?.user ?? imap?.user ?? "",
+    allowInsecureTransport:
+      booleanValue(env.EMAIL_ALLOW_INSECURE_TRANSPORT, "EMAIL_ALLOW_INSECURE_TRANSPORT") ?? false,
+    allowInvalidTlsCertificates:
+      booleanValue(
+        env.EMAIL_ALLOW_INVALID_TLS_CERTIFICATES,
+        "EMAIL_ALLOW_INVALID_TLS_CERTIFICATES",
+      ) ?? false,
     smtp,
     imap,
     gmail: partial.gmail,
   };
 }
 
-function validateServer(server: MailServerConfig | undefined, protocol: "SMTP" | "IMAP"): void {
+function validateServer(
+  server: MailServerConfig | undefined,
+  protocol: "SMTP" | "IMAP",
+  allowInvalidTlsCertificates: boolean,
+): void {
   if (!server?.host) throw new Error(`${protocol} host is missing`);
   if (!server.user) throw new Error(`${protocol} user is missing`);
   if (!server.pass && !server.accessToken) {
     throw new Error(`${protocol} password/app password or access token is missing`);
+  }
+  if (!server.tlsRejectUnauthorized && !allowInvalidTlsCertificates) {
+    throw new Error(
+      `${protocol} certificate verification cannot be disabled unless EMAIL_ALLOW_INVALID_TLS_CERTIFICATES=true`,
+    );
   }
 }
 
@@ -450,10 +468,10 @@ export function validateEmailConfig(config: EmailConfig, operation: EmailOperati
   }
 
   if (["send", "reply"].includes(operation)) {
-    validateServer(config.smtp, "SMTP");
+    validateServer(config.smtp, "SMTP", config.allowInvalidTlsCertificates);
     if (!config.defaultFrom) throw new Error("Default sender address is missing");
   } else {
-    validateServer(config.imap, "IMAP");
+    validateServer(config.imap, "IMAP", config.allowInvalidTlsCertificates);
   }
 }
 
