@@ -121,11 +121,10 @@ test("Streamable HTTP endpoint exposes exactly the original five tools", async (
   }
 });
 
-test("native HTTPS encrypts MCP headers and bodies without changing protocol handling", async () => {
+test("native HTTPS works without API-key authentication by default", async () => {
   const server = createHttpServer({
     env: {
       MCP_PATH: "/mcp",
-      MCP_API_KEY: "test-key",
     },
     tls: testTls,
   });
@@ -151,7 +150,6 @@ test("native HTTPS encrypts MCP headers and bodies without changing protocol han
     const response = await secureRequest(port, "/mcp", {
       method: "POST",
       headers: {
-        authorization: "Bearer test-key",
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
         "content-length": Buffer.byteLength(body),

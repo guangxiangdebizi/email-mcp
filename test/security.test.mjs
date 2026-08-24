@@ -5,13 +5,13 @@ import { resolveEmailConfig, validateEmailConfig } from "../dist/config.js";
 import { EmailService } from "../dist/email/emailService.js";
 import { assertSecureDeployment, loadTlsServerOptions } from "../dist/security.js";
 
-test("network deployments fail closed without HTTPS and authentication", () => {
+test("network deployments require HTTPS while API-key authentication remains optional", () => {
   assert.doesNotThrow(() => assertSecureDeployment({}, "127.0.0.1", false));
   assert.throws(
     () => assertSecureDeployment({ MCP_API_KEY: "x".repeat(32) }, "0.0.0.0", false),
     /plaintext HTTP/i,
   );
-  assert.throws(() => assertSecureDeployment({}, "0.0.0.0", true), /MCP_API_KEY/);
+  assert.doesNotThrow(() => assertSecureDeployment({}, "0.0.0.0", true));
   assert.throws(
     () => assertSecureDeployment({ MCP_API_KEY: "short" }, "0.0.0.0", true),
     /at least 32 bytes/i,

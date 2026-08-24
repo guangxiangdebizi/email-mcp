@@ -146,7 +146,7 @@ export const EMAIL_TOOLS = [
     },
 ];
 export function createEmailMcpServer(headers = {}, env = process.env) {
-    const server = new Server({ name: "email-mcp-server", version: "2.1.0" }, {
+    const server = new Server({ name: "email-mcp-server", version: "2.1.1" }, {
         capabilities: { tools: {} },
         instructions: "Use the optional account argument to select an EMAIL_ACCOUNTS_JSON account. " +
             "The server also accepts per-request X-Email-* connection headers.",
@@ -244,7 +244,7 @@ export function createHttpServer(options = {}) {
             writeJson(res, 200, {
                 ok: true,
                 name: "email-mcp-server",
-                version: "2.1.0",
+                version: "2.1.1",
                 transport: "streamable-http",
                 tls: requestUsesTls(req, env),
                 endpoint: mcpPath,

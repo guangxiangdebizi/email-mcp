@@ -58,7 +58,6 @@ curl http://localhost:3200/health
 ```env
 MCP_HOST=0.0.0.0
 MCP_PORT=3200
-MCP_API_KEY=replace-with-at-least-32-random-bytes
 MCP_TLS_KEY_PATH=/etc/email-mcp/tls/server.key
 MCP_TLS_CERT_PATH=/etc/email-mcp/tls/server.crt
 MCP_TLS_MIN_VERSION=TLSv1.2
@@ -72,6 +71,9 @@ https://mail-mcp.example.com:3200/mcp
 
 证书必须由客户端信任，并且证书域名必须与 URL 主机名匹配。只配置证书或只配置私钥会
 拒绝启动。非回环地址上的明文 HTTP 也会默认拒绝启动。
+
+`MCP_API_KEY` 默认不启用。部署者需要额外的客户端鉴权时，可显式设置至少 32 字节的
+`MCP_API_KEY`；设置后客户端再通过 Bearer 或 `X-MCP-API-Key` 发送它。
 
 也可以由 Nginx、Caddy 或负载均衡器终止 HTTPS，此时保持 `MCP_HOST=127.0.0.1`，只允许
 代理通过本机回环访问后端。只有代理可信且会覆盖 `X-Forwarded-Proto` 时才设置
@@ -157,7 +159,6 @@ MCP 客户端可以为 Streamable HTTP 连接设置静态 Header：
       "type": "streamable-http",
       "url": "https://mail-mcp.example.com:3200/mcp",
       "headers": {
-        "Authorization": "Bearer your-mcp-api-key",
         "X-Email-Account": "work"
       }
     }
@@ -198,8 +199,8 @@ MCP 客户端可以为 Streamable HTTP 连接设置静态 Header：
 账号选择优先级为：工具 `account` > `X-Email-Account` > `X-Email-Config.account` >
 `EMAIL_DEFAULT_ACCOUNT`。
 
-> Header 中可能包含邮箱授权码。跨机器部署时必须使用 HTTPS，并建议设置
-> `MCP_API_KEY`；不要在日志中打印请求头。
+> Header 中可能包含邮箱授权码。跨机器部署时必须使用 HTTPS；需要客户端鉴权时再设置
+> `MCP_API_KEY`。不要在日志中打印请求头。
 
 ## 固定的 5 个工具
 
@@ -226,7 +227,7 @@ from:alice@example.com subject:"quarterly report" since:2026-01-01 before:2026-0
 | `MCP_HOST` | `127.0.0.1` | HTTP/HTTPS 监听地址 |
 | `MCP_PORT` | `3200` | HTTP/HTTPS 端口 |
 | `MCP_PATH` | `/mcp` | Streamable HTTP 路径 |
-| `MCP_API_KEY` | 空 | Bearer / `X-MCP-API-Key`；非回环部署必须至少 32 字节 |
+| `MCP_API_KEY` | 空 | 可选；设置后启用 Bearer / `X-MCP-API-Key` 鉴权，网络部署至少 32 字节 |
 | `MCP_CORS_ORIGIN` | 空 | 可选 CORS 来源，多个值用逗号分隔 |
 | `MCP_TLS_KEY_PATH` | 空 | 原生 HTTPS 私钥文件；必须与证书同时配置 |
 | `MCP_TLS_CERT_PATH` | 空 | 原生 HTTPS 证书链文件 |

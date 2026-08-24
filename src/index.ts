@@ -171,7 +171,7 @@ export function createEmailMcpServer(
   env: NodeJS.ProcessEnv = process.env,
 ): Server {
   const server = new Server(
-    { name: "email-mcp-server", version: "2.1.0" },
+    { name: "email-mcp-server", version: "2.1.1" },
     {
       capabilities: { tools: {} },
       instructions:
@@ -284,7 +284,7 @@ export function createHttpServer(options: HttpServerOptions = {}) {
       writeJson(res, 200, {
         ok: true,
         name: "email-mcp-server",
-        version: "2.1.0",
+        version: "2.1.1",
         transport: "streamable-http",
         tls: requestUsesTls(req, env),
         endpoint: mcpPath,

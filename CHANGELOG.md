@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.1 - 2026-08-24
+
+### Changed
+
+- API-key authentication is optional by default for both loopback and HTTPS network deployments.
+- Setting `MCP_API_KEY` explicitly still enables Bearer / `X-MCP-API-Key` authentication.
+- Plaintext HTTP on non-loopback listeners remains blocked by default.
+
 ## 2.1.0 - 2026-08-24
 
 ### Security

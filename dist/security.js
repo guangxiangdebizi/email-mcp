@@ -48,9 +48,6 @@ export function assertSecureDeployment(env, host, tlsEnabled) {
         throw new Error("Refusing to expose MCP over plaintext HTTP on a non-loopback address. Configure MCP_TLS_KEY_PATH and MCP_TLS_CERT_PATH, bind MCP_HOST to 127.0.0.1 behind a TLS proxy, or explicitly set MCP_ALLOW_INSECURE_HTTP=true");
     }
     const apiKey = env.MCP_API_KEY;
-    if (!loopback && !apiKey && !envBoolean(env, "MCP_ALLOW_UNAUTHENTICATED")) {
-        throw new Error("MCP_API_KEY is required when MCP_HOST is not a loopback address. Set MCP_ALLOW_UNAUTHENTICATED=true only for an isolated trusted network");
-    }
     if (!loopback &&
         apiKey &&
         Buffer.byteLength(apiKey, "utf8") < 32 &&

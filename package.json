@@ -1,6 +1,6 @@
 {
   "name": "@xingyuchen/email-mcp",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Provider-neutral email MCP server over Streamable HTTP",
   "type": "module",
   "main": "dist/index.js",

@@ -65,11 +65,6 @@ export function assertSecureDeployment(
   }
 
   const apiKey = env.MCP_API_KEY;
-  if (!loopback && !apiKey && !envBoolean(env, "MCP_ALLOW_UNAUTHENTICATED")) {
-    throw new Error(
-      "MCP_API_KEY is required when MCP_HOST is not a loopback address. Set MCP_ALLOW_UNAUTHENTICATED=true only for an isolated trusted network",
-    );
-  }
   if (
     !loopback &&
     apiKey &&
